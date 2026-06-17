@@ -1731,7 +1731,7 @@ export default function SiroperApp(){
           notifications:[{
             id:600,
             title:"Buongiorno, principessa! 🌹",
-            body:"Buenos días, princesa ❤️",
+            body:"",
             schedule:{ on:{ hour:6, minute:0 }, allowWhileIdle:true },
           }],
         });
