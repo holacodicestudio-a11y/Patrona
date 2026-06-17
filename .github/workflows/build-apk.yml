@@ -1,4 +1,4 @@
-name: Construir APKs de Sirope
+name: Construir Producción Patrona
 
 on:
   push:
@@ -8,18 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - role: jefe
-            appid: com.sirope.inventario
-            appname: "Sirope Admin"
-            artifact: Sirope-Admin-APK
-          - role: productor
-            appid: com.sirope.produccion
-            appname: "Sirope Produccion"
-            artifact: Sirope-Produccion-APK
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,30 +18,29 @@ jobs:
       - name: Instalar dependencias
         run: npm install
 
-      - name: Ajustar nombre e id de la app (${{ matrix.role }})
-        run: |
-          node -e "const fs=require('fs');const f='capacitor.config.json';const c=JSON.parse(fs.readFileSync(f));c.appId='${{ matrix.appid }}';c.appName='${{ matrix.appname }}';fs.writeFileSync(f,JSON.stringify(c,null,2));"
-
-      - name: Compilar la app web (rol ${{ matrix.role }})
+      - name: Compilar la app (rosa)
         run: npm run build
-        env:
-          VITE_ROLE: ${{ matrix.role }}
 
-      - name: Crear el proyecto Android
+      - name: Crear proyecto Android
         run: npx cap add android || npx cap sync android
 
       - name: Sincronizar
         run: npx cap sync android
 
+      - name: Icono de gatita rosa
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 make-icon.py
+
       - name: Permisos a Gradle
         run: chmod +x android/gradlew
 
-      - name: Construir el APK
+      - name: Construir APK
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Subir el APK (${{ matrix.appname }})
+      - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: Produccion-Patrona-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
