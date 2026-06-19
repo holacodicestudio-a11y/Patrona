@@ -1732,7 +1732,7 @@ export default function SiroperApp(){
             id:600,
             title:"Buongiorno, principessa! 🌹",
             body:"",
-            schedule:{ on:{ hour:6, minute:0 }, allowWhileIdle:true },
+            schedule:{ at: new Date(Date.now()+15000) },
           }],
         });
       }catch(e){ console.error("notif",e); }
