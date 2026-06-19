@@ -1,5 +1,11 @@
 {
   "appId": "com.sirope.produccion",
-  "appName": "Producción Patrona",
-  "webDir": "dist"
+  "appName": "Producción Andi",
+  "webDir": "dist",
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_kitty",
+      "iconColor": "#DB2777"
+    }
+  }
 }

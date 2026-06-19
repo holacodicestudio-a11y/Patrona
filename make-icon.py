@@ -80,4 +80,37 @@ open(f"{base}/values/ic_launcher_background.xml","w").write(
 # quita el vector por defecto si existe
 for p in [f"{base}/drawable-v24/ic_launcher_foreground.xml"]:
     if os.path.exists(p): os.remove(p)
-print("icono gatita rosa generado")
+
+# ---- Icono para la barra de notificaciones ----
+# Android pinta el icono pequeño como SILUETA (solo el canal alfa),
+# así que dibujamos la gatita en blanco sobre transparente.
+def draw_silhouette(sz):
+    img=Image.new("RGBA",(sz,sz),(0,0,0,0))
+    d=ImageDraw.Draw(img)
+    cx,cy=sz/2, sz*0.56
+    r=sz*0.34
+    earw=r*1.0
+    for sgn in (-1,1):
+        ex=cx+sgn*r*0.74; ey=cy-r*0.74
+        d.polygon([(ex-earw*0.5,ey+earw*0.55),(ex+earw*0.5,ey+earw*0.55),
+                   (ex+sgn*earw*0.16,ey-earw*0.62)],fill=(255,255,255,255))
+    d.ellipse([cx-r,cy-r,cx+r,cy+r],fill=(255,255,255,255))
+    # ojos y nariz "recortados" (transparentes) para que se lea como gato
+    eo=r*0.42; ey=cy-r*0.04; er=r*0.13
+    for sgn in (-1,1):
+        d.ellipse([cx+sgn*eo-er,ey-er*1.2,cx+sgn*eo+er,ey+er*1.2],fill=(0,0,0,0))
+    nr=r*0.10
+    d.polygon([(cx-nr,cy+r*0.16),(cx+nr,cy+r*0.16),(cx,cy+r*0.30)],fill=(0,0,0,0))
+    return img
+
+notif={"mdpi":24,"hdpi":36,"xhdpi":48,"xxhdpi":72,"xxxhdpi":96}
+for name,s in notif.items():
+    folder=f"{base}/drawable-{name}"
+    os.makedirs(folder,exist_ok=True)
+    draw_silhouette(s).save(f"{folder}/ic_stat_kitty.png")
+
+# ---- Icono grande a color (lado derecho de la notificación) ----
+os.makedirs(f"{base}/drawable",exist_ok=True)
+draw_icon(192).save(f"{base}/drawable/kitty_large.png")
+
+print("icono gatita rosa + iconos de notificación generados")
