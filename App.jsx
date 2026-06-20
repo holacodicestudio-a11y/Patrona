@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Package, ArrowDownLeft, ArrowUpRight,
   Users, Truck, FlaskConical, Tag, FileSpreadsheet,
   Plus, Search, Edit2, Trash2, X, AlertTriangle,
-  Menu, Upload, Download, TrendingUp, RefreshCw, ChevronDown, ChevronUp
+  Menu, Upload, Download, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Boxes
 } from "lucide-react";
 
 /* ══════════════════════════════════════════════
@@ -77,7 +77,7 @@ let CURRENT_USER_EMAIL = "";
 
 /* Nombre y tema visual según el rol.
    La app de Producción ("Producción Patrona") va en rosa. */
-const APP_NAME = IS_BOSS ? "Sirope" : "Producción Patrona";
+const APP_NAME = IS_BOSS ? "Administración Sirope" : "Producción Sirope";
 const THEME = IS_BOSS ? {
   brand:"#FF6B35",
   sidebar:"#0D1629",
@@ -455,13 +455,8 @@ const GrpCard=({grpKey,grp,count,totalStock,selected,onClick})=>(
 /* ══════════════════════════════════════════════
    DASHBOARD
 ══════════════════════════════════════════════ */
-function Dashboard({products,entries,exits,setView}){
-  const alerts=products.filter(p=>p.stock<p.min);
-  const alertsShown=alerts.slice(0,12);
-  const totalVal=products.reduce((s,p)=>s+p.stock*p.cost,0);
-  const totalSales=exits.reduce((s,e)=>s+e.qty*e.price,0);
-  const byGrp={};
-  Object.keys(GRP).forEach(k=>{byGrp[k]=products.filter(p=>p.grp===k).length});
+function Dashboard({products,entries,exits,insumos=[],setView}){
+  const valorInsumos=insumos.reduce((s,i)=>s+(Number(i.stock)||0)*(Number(i.cost)||0),0);
 
   return(
     <div>
@@ -496,46 +491,9 @@ function Dashboard({products,entries,exits,setView}){
       <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
         <StatCard label="Productos"   value={products.length} sub="en catálogo"
           icon={<Package size={18}/>} color={BRAND}/>
-        <StatCard label="Líneas"      value={Object.keys(GRP).length} sub="grupos activos"
-          icon={<TrendingUp size={18}/>} color="#6D28D9"/>
-        <StatCard label="Alertas"     value={alerts.length} sub="stock bajo"
-          icon={<AlertTriangle size={18}/>} color="#D97706"/>
-        <StatCard label="Ventas"      value={fmt(totalSales)} sub="acumulado"
-          icon={<RefreshCw size={18}/>} color="#059669"/>
+        <StatCard label="Valor de insumos" value={fmt(valorInsumos)} sub="invertido en materia prima"
+          icon={<Boxes size={18}/>} color="#6D28D9"/>
       </div>
-
-      {alerts.length>0&&(
-        <div style={{background:"#FFF7ED",border:"1.5px solid #FED7AA",borderRadius:14,
-          padding:16,marginBottom:20}}>
-          <h3 style={{margin:"0 0 12px",fontSize:13,fontWeight:800,color:"#C2410C",
-            display:"flex",alignItems:"center",gap:8}}>
-            <AlertTriangle size={15}/> Alertas de Stock ({alerts.length})
-          </h3>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8}}>
-            {alertsShown.map(p=>{
-              const s=stockSt(p.stock,p.min);
-              const g=GRP[p.grp];
-              return(
-                <div key={p.id} style={{background:"#fff",borderRadius:9,padding:"10px 13px",
-                  borderLeft:`4px solid ${s.color}`}}>
-                  <p style={{margin:"0 0 2px",fontWeight:800,fontSize:12}}>{p.name}</p>
-                  <p style={{margin:"0 0 5px",fontSize:11,color:s.color,fontWeight:700}}>
-                    {p.stock} {p.unit} / mín {p.min}
-                  </p>
-                  <GrpBadge grp={p.grp}/>
-                </div>
-              );
-            })}
-          </div>
-          {alerts.length>12&&(
-            <p onClick={()=>setView&&setView("inventario")}
-              style={{margin:"12px 0 0",fontSize:12,color:"#C2410C",fontWeight:700,
-                cursor:"pointer",textDecoration:"underline"}}>
-              + {alerts.length-12} productos más con stock bajo — ver en Inventario
-            </p>
-          )}
-        </div>
-      )}
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
         <Card style={{padding:16}}>
@@ -866,6 +824,8 @@ function ProductPicker({products, value, onChange, grp, onCreate, placeholder}){
 function EntradasView({entries,setEntries,products,setProducts,suppliers,showToast}){
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({});
+  const [editId,setEditId]=useState(null);
+  const [confirm,setConfirm]=useState(null);
   const [search,setSearch]=useState("");
   const [selGrp,setSelGrp]=useState(null);
   const f=k=>e=>setForm(prev=>({...prev,[k]:e.target.value}));
@@ -873,15 +833,42 @@ function EntradasView({entries,setEntries,products,setProducts,suppliers,showToa
   const filtProds=selGrp?products.filter(p=>p.grp===selGrp):products;
 
   const openAdd=()=>{
+    setEditId(null);
     setForm({date:tdayStr(),prodId:"",qty:1,cost:"",provId:suppliers[0]?.id||"",notes:""});
+    setModal(true);
+  };
+  const openEdit=e=>{
+    setEditId(e.id);
+    setSelGrp(null);
+    setForm({date:e.date,prodId:e.prodId,qty:e.qty,cost:e.cost??"",provId:e.provId||"",notes:e.notes||""});
     setModal(true);
   };
   const save=()=>{
     if(!form.prodId) return showToast("Selecciona un producto","error");
     if(+form.qty<=0) return showToast("Cantidad inválida","error");
-    setEntries(prev=>[...prev,{...form,id:nid("ent"),qty:+form.qty,cost:+form.cost}]);
-    setProducts(prev=>prev.map(p=>p.id===form.prodId?{...p,stock:p.stock+(+form.qty)}:p));
-    showToast(`+${form.qty} unidades registradas`);setModal(false);
+    const nq=+form.qty, nc=+form.cost;
+    if(editId){
+      const old=entries.find(x=>x.id===editId);
+      setProducts(prev=>prev.map(p=>{
+        let s=p.stock;
+        if(old&&p.id===old.prodId) s-=old.qty;   // revertir lo anterior
+        if(p.id===form.prodId)     s+=nq;          // aplicar lo nuevo
+        return s===p.stock?p:{...p,stock:s};
+      }));
+      setEntries(prev=>prev.map(e=>e.id===editId?{...form,id:editId,qty:nq,cost:nc}:e));
+      showToast("Entrada actualizada");
+    }else{
+      setEntries(prev=>[...prev,{...form,id:nid("ent"),qty:nq,cost:nc}]);
+      setProducts(prev=>prev.map(p=>p.id===form.prodId?{...p,stock:p.stock+nq}:p));
+      showToast(`+${nq} unidades registradas`);
+    }
+    setModal(false);setEditId(null);
+  };
+  const del=id=>{
+    const e=entries.find(x=>x.id===id);
+    if(e) setProducts(prev=>prev.map(p=>p.id===e.prodId?{...p,stock:p.stock-e.qty}:p));
+    setEntries(prev=>prev.filter(x=>x.id!==id));
+    showToast("Entrada eliminada");setConfirm(null);
   };
 
   const filtered=useMemo(()=>entries.filter(e=>{
@@ -910,8 +897,8 @@ function EntradasView({entries,setEntries,products,setProducts,suppliers,showToa
       </div>
 
       <Card>
-        <Tbl cols={["Fecha","Producto","Grupo","Cantidad","Costo Unit.","Total","Proveedor","Notas"]}>
-          {filtered.length===0&&<EmptyRow cols={8} msg="Sin entradas registradas"/>}
+        <Tbl cols={IS_BOSS?["Fecha","Producto","Grupo","Cantidad","Costo Unit.","Total","Proveedor","Notas",""]:["Fecha","Producto","Grupo","Cantidad","Costo Unit.","Total","Proveedor","Notas"]}>
+          {filtered.length===0&&<EmptyRow cols={IS_BOSS?9:8} msg="Sin entradas registradas"/>}
           {[...filtered].reverse().map(e=>{
             const p=products.find(x=>x.id===e.prodId);
             const prov=suppliers.find(x=>x.id===e.provId);
@@ -925,6 +912,14 @@ function EntradasView({entries,setEntries,products,setProducts,suppliers,showToa
                 <Td style={{fontWeight:700}}>{e.cost?fmt(e.qty*e.cost):"—"}</Td>
                 <Td style={{color:"#64748B",fontSize:12}}>{prov?.name||"—"}</Td>
                 <Td style={{color:"#94A3B8",fontSize:11}}>{e.notes||"—"}</Td>
+                {IS_BOSS&&(
+                  <Td>
+                    <div style={{display:"flex",gap:4}}>
+                      <Btn small variant="secondary" onClick={()=>openEdit(e)}><Edit2 size={11}/></Btn>
+                      <Btn small variant="danger" onClick={()=>setConfirm(e.id)}><Trash2 size={11}/></Btn>
+                    </div>
+                  </Td>
+                )}
               </Tr>
             );
           })}
@@ -932,7 +927,7 @@ function EntradasView({entries,setEntries,products,setProducts,suppliers,showToa
       </Card>
 
       {modal&&(
-        <Modal title="Registrar Entrada" onClose={()=>setModal(false)}>
+        <Modal title={editId?"Editar Entrada":"Registrar Entrada"} onClose={()=>{setModal(false);setEditId(null);}}>
           <FormRow>
             <Field label="Fecha" half><FInput type="date" value={form.date} onChange={f("date")}/></Field>
             <Field label="Proveedor" half>
@@ -960,11 +955,12 @@ function EntradasView({entries,setEntries,products,setProducts,suppliers,showToa
           </FormRow>
           <Field label="Notas"><FArea value={form.notes} onChange={f("notes")} placeholder="Info adicional..."/></Field>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-            <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>
-            <Btn onClick={save} variant="success"><ArrowDownLeft size={13}/> Confirmar</Btn>
+            <Btn variant="secondary" onClick={()=>{setModal(false);setEditId(null);}}>Cancelar</Btn>
+            <Btn onClick={save} variant="success"><ArrowDownLeft size={13}/> {editId?"Guardar cambios":"Confirmar"}</Btn>
           </div>
         </Modal>
       )}
+      {confirm&&<Confirm msg="¿Eliminar esta entrada? El stock se ajustará." onYes={()=>del(confirm)} onNo={()=>setConfirm(null)}/>}
     </div>
   );
 }
@@ -975,12 +971,21 @@ function EntradasView({entries,setEntries,products,setProducts,suppliers,showToa
 function SalidasView({exits,setExits,products,setProducts,clients,showToast}){
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({});
+  const [editId,setEditId]=useState(null);
+  const [confirm,setConfirm]=useState(null);
   const [search,setSearch]=useState("");
   const [selGrp,setSelGrp]=useState(null);
   const f=k=>e=>setForm(prev=>({...prev,[k]:e.target.value}));
 
   const openAdd=()=>{
+    setEditId(null);
     setForm({date:tdayStr(),prodId:"",qty:1,price:"",cliId:clients[0]?.id||"",notes:""});
+    setModal(true);
+  };
+  const openEdit=e=>{
+    setEditId(e.id);
+    setSelGrp(null);
+    setForm({date:e.date,prodId:e.prodId,qty:e.qty,price:e.price??"",cliId:e.cliId||"",notes:e.notes||""});
     setModal(true);
   };
   const save=()=>{
@@ -988,10 +993,32 @@ function SalidasView({exits,setExits,products,setProducts,clients,showToast}){
     const prod=products.find(p=>p.id===form.prodId);
     if(!prod) return showToast("Producto no encontrado","error");
     if(+form.qty<=0) return showToast("Cantidad inválida","error");
-    if(prod.stock<+form.qty) return showToast(`Stock insuficiente. Disponible: ${prod.stock} ${prod.unit}`,"error");
-    setExits(prev=>[...prev,{...form,id:nid("sal"),qty:+form.qty,price:+form.price}]);
-    setProducts(prev=>prev.map(p=>p.id===form.prodId?{...p,stock:p.stock-(+form.qty)}:p));
-    showToast(`-${form.qty} unidades registradas`);setModal(false);
+    const nq=+form.qty, np=+form.price;
+    if(editId){
+      const old=exits.find(x=>x.id===editId);
+      const avail=prod.stock+((old&&old.prodId===form.prodId)?old.qty:0);
+      if(avail<nq) return showToast(`Stock insuficiente. Disponible: ${avail} ${prod.unit}`,"error");
+      setProducts(prev=>prev.map(p=>{
+        let s=p.stock;
+        if(old&&p.id===old.prodId) s+=old.qty;   // revertir salida anterior
+        if(p.id===form.prodId)     s-=nq;          // aplicar nueva
+        return s===p.stock?p:{...p,stock:s};
+      }));
+      setExits(prev=>prev.map(e=>e.id===editId?{...form,id:editId,qty:nq,price:np}:e));
+      showToast("Salida actualizada");
+    }else{
+      if(prod.stock<nq) return showToast(`Stock insuficiente. Disponible: ${prod.stock} ${prod.unit}`,"error");
+      setExits(prev=>[...prev,{...form,id:nid("sal"),qty:nq,price:np}]);
+      setProducts(prev=>prev.map(p=>p.id===form.prodId?{...p,stock:p.stock-nq}:p));
+      showToast(`-${nq} unidades registradas`);
+    }
+    setModal(false);setEditId(null);
+  };
+  const del=id=>{
+    const e=exits.find(x=>x.id===id);
+    if(e) setProducts(prev=>prev.map(p=>p.id===e.prodId?{...p,stock:p.stock+e.qty}:p));
+    setExits(prev=>prev.filter(x=>x.id!==id));
+    showToast("Salida eliminada");setConfirm(null);
   };
 
   const filtered=useMemo(()=>exits.filter(e=>{
@@ -1018,8 +1045,8 @@ function SalidasView({exits,setExits,products,setProducts,clients,showToast}){
         </FSelect>
       </div>
       <Card>
-        <Tbl cols={["Fecha","Producto","Grupo","Cantidad","Precio Unit.","Total","Cliente","Notas"]}>
-          {filtered.length===0&&<EmptyRow cols={8} msg="Sin salidas registradas"/>}
+        <Tbl cols={IS_BOSS?["Fecha","Producto","Grupo","Cantidad","Precio Unit.","Total","Cliente","Notas",""]:["Fecha","Producto","Grupo","Cantidad","Precio Unit.","Total","Cliente","Notas"]}>
+          {filtered.length===0&&<EmptyRow cols={IS_BOSS?9:8} msg="Sin salidas registradas"/>}
           {[...filtered].reverse().map(e=>{
             const p=products.find(x=>x.id===e.prodId);
             const cli=clients.find(x=>x.id===e.cliId);
@@ -1033,6 +1060,14 @@ function SalidasView({exits,setExits,products,setProducts,clients,showToast}){
                 <Td style={{fontWeight:700,color:BRAND}}>{e.price?fmt(e.qty*e.price):"—"}</Td>
                 <Td style={{color:"#64748B",fontSize:12}}>{cli?.name||"—"}</Td>
                 <Td style={{color:"#94A3B8",fontSize:11}}>{e.notes||"—"}</Td>
+                {IS_BOSS&&(
+                  <Td>
+                    <div style={{display:"flex",gap:4}}>
+                      <Btn small variant="secondary" onClick={()=>openEdit(e)}><Edit2 size={11}/></Btn>
+                      <Btn small variant="danger" onClick={()=>setConfirm(e.id)}><Trash2 size={11}/></Btn>
+                    </div>
+                  </Td>
+                )}
               </Tr>
             );
           })}
@@ -1040,7 +1075,7 @@ function SalidasView({exits,setExits,products,setProducts,clients,showToast}){
       </Card>
 
       {modal&&(
-        <Modal title="Registrar Salida" onClose={()=>setModal(false)}>
+        <Modal title={editId?"Editar Salida":"Registrar Salida"} onClose={()=>{setModal(false);setEditId(null);}}>
           <FormRow>
             <Field label="Fecha" half><FInput type="date" value={form.date} onChange={f("date")}/></Field>
             <Field label="Cliente" half>
@@ -1067,11 +1102,12 @@ function SalidasView({exits,setExits,products,setProducts,clients,showToast}){
           </FormRow>
           <Field label="Notas"><FArea value={form.notes} onChange={f("notes")} placeholder="Info adicional..."/></Field>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-            <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>
-            <Btn onClick={save} variant="danger"><ArrowUpRight size={13}/> Confirmar</Btn>
+            <Btn variant="secondary" onClick={()=>{setModal(false);setEditId(null);}}>Cancelar</Btn>
+            <Btn onClick={save} variant="danger"><ArrowUpRight size={13}/> {editId?"Guardar cambios":"Confirmar"}</Btn>
           </div>
         </Modal>
       )}
+      {confirm&&<Confirm msg="¿Eliminar esta salida? El stock se ajustará." onYes={()=>del(confirm)} onNo={()=>setConfirm(null)}/>}
     </div>
   );
 }
@@ -1158,23 +1194,49 @@ function ProduccionView({prodLogs,setProdLogs,products,setProducts,showToast}){
   const [selGrp,setSelGrp]=useState(null);
   const [modal,setModal]=useState(false);
   const [form,setForm]=useState({});
+  const [editId,setEditId]=useState(null);
+  const [confirm,setConfirm]=useState(null);
   const f=k=>e=>setForm(prev=>({...prev,[k]:e.target.value}));
 
   const filtProds=selGrp?products.filter(p=>p.grp===selGrp):products;
 
   const openAdd=()=>{
+    setEditId(null);
     setForm({date:tdayStr(),grp:selGrp||"jarabes",prodId:"",
       qty:1,unit:GRP[selGrp||"jarabes"].defUnit,notes:""});
+    setModal(true);
+  };
+  const openEdit=l=>{
+    setEditId(l.id);
+    setForm({date:l.date,grp:l.grp,prodId:l.prodId,qty:l.qty,unit:l.unit||GRP[l.grp]?.defUnit||"",notes:l.notes||""});
     setModal(true);
   };
   const save=()=>{
     if(!form.prodId) return showToast("Selecciona un producto","error");
     if(+form.qty<=0) return showToast("Cantidad inválida","error");
     const q=+form.qty;
-    setProdLogs(prev=>[...prev,{...form,id:nid("prod"),qty:q,by:CURRENT_USER_EMAIL}]);
-    // La producción ENTRA al almacén: suma al stock del producto
-    setProducts(prev=>prev.map(p=>p.id===form.prodId?{...p,stock:(p.stock||0)+q}:p));
-    showToast(`Lote registrado · +${q} al almacén ✓`);setModal(false);
+    if(editId){
+      const old=prodLogs.find(x=>x.id===editId);
+      setProducts(prev=>prev.map(p=>{
+        let s=p.stock||0;
+        if(old&&p.id===old.prodId) s-=old.qty;   // revertir lote anterior
+        if(p.id===form.prodId)     s+=q;           // aplicar nuevo
+        return s===(p.stock||0)?p:{...p,stock:s};
+      }));
+      setProdLogs(prev=>prev.map(l=>l.id===editId?{...form,id:editId,qty:q,by:old?.by||CURRENT_USER_EMAIL}:l));
+      showToast("Lote actualizado");
+    }else{
+      setProdLogs(prev=>[...prev,{...form,id:nid("prod"),qty:q,by:CURRENT_USER_EMAIL}]);
+      setProducts(prev=>prev.map(p=>p.id===form.prodId?{...p,stock:(p.stock||0)+q}:p));
+      showToast(`Lote registrado · +${q} al almacén ✓`);
+    }
+    setModal(false);setEditId(null);
+  };
+  const del=id=>{
+    const l=prodLogs.find(x=>x.id===id);
+    if(l) setProducts(prev=>prev.map(p=>p.id===l.prodId?{...p,stock:(p.stock||0)-l.qty}:p));
+    setProdLogs(prev=>prev.filter(x=>x.id!==id));
+    showToast("Lote eliminado");setConfirm(null);
   };
 
   const filtered=useMemo(()=>prodLogs.filter(l=>!selGrp||l.grp===selGrp),[prodLogs,selGrp]);
@@ -1217,8 +1279,8 @@ function ProduccionView({prodLogs,setProdLogs,products,setProducts,showToast}){
       </div>
 
       <Card>
-        <Tbl cols={["Fecha","Grupo","Producto","Cant. Producida","Unidad","Notas"]}>
-          {filtered.length===0&&<EmptyRow cols={6} msg="Sin lotes registrados"/>}
+        <Tbl cols={IS_BOSS?["Fecha","Grupo","Producto","Cant. Producida","Unidad","Notas",""]:["Fecha","Grupo","Producto","Cant. Producida","Unidad","Notas"]}>
+          {filtered.length===0&&<EmptyRow cols={IS_BOSS?7:6} msg="Sin lotes registrados"/>}
           {[...filtered].reverse().map(l=>{
             const p=products.find(x=>x.id===l.prodId);
             const g=GRP[l.grp];
@@ -1230,6 +1292,14 @@ function ProduccionView({prodLogs,setProdLogs,products,setProducts,showToast}){
                 <Td><span style={{fontWeight:900,color:"#6D28D9",fontSize:14}}>{l.qty}</span></Td>
                 <Td style={{color:"#64748B"}}>{l.unit||p?.unit||"—"}</Td>
                 <Td style={{color:"#94A3B8",fontSize:11}}>{l.notes||"—"}</Td>
+                {IS_BOSS&&(
+                  <Td>
+                    <div style={{display:"flex",gap:4}}>
+                      <Btn small variant="secondary" onClick={()=>openEdit(l)}><Edit2 size={11}/></Btn>
+                      <Btn small variant="danger" onClick={()=>setConfirm(l.id)}><Trash2 size={11}/></Btn>
+                    </div>
+                  </Td>
+                )}
               </Tr>
             );
           })}
@@ -1237,7 +1307,7 @@ function ProduccionView({prodLogs,setProdLogs,products,setProducts,showToast}){
       </Card>
 
       {modal&&(
-        <Modal title="Registrar Lote de Producción" onClose={()=>setModal(false)}>
+        <Modal title={editId?"Editar Lote de Producción":"Registrar Lote de Producción"} onClose={()=>{setModal(false);setEditId(null);}}>
           <Field label="Grupo / Línea">
             <FSelect value={form.grp} onChange={e=>{
               const g=e.target.value;
@@ -1265,11 +1335,12 @@ function ProduccionView({prodLogs,setProdLogs,products,setProducts,showToast}){
           </FormRow>
           <Field label="Notas"><FArea value={form.notes} onChange={f("notes")} placeholder="Detalles del lote..."/></Field>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-            <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>
-            <Btn onClick={save}><FlaskConical size={13}/> Registrar</Btn>
+            <Btn variant="secondary" onClick={()=>{setModal(false);setEditId(null);}}>Cancelar</Btn>
+            <Btn onClick={save}><FlaskConical size={13}/> {editId?"Guardar cambios":"Registrar"}</Btn>
           </div>
         </Modal>
       )}
+      {confirm&&<Confirm msg="¿Eliminar este lote? El stock se ajustará." onYes={()=>del(confirm)} onNo={()=>setConfirm(null)}/>}
     </div>
   );
 }
@@ -1637,7 +1708,7 @@ function LoginScreen(){
           fontSize:24,color:"#fff"}}>{IS_BOSS?"S":"P"}</span>
       </div>
       <h2 style={{margin:"0 0 2px",fontSize:19,fontWeight:900,color:"#1E293B"}}>
-        {IS_BOSS ? "Sirope Admin" : "Producción Patrona"}
+        {IS_BOSS ? "Administración Sirope" : "Producción Sirope"}
       </h2>
       <p style={{margin:"0 0 18px",fontSize:12,color:"#94A3B8"}}>Inicia sesión para continuar</p>
       <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Correo"
@@ -1657,6 +1728,42 @@ function LoginScreen(){
   );
 }
 
+function WarningModal({onAccept}){
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(13,22,41,.78)",
+      display:"flex",alignItems:"center",justifyContent:"center",padding:22,
+      fontFamily:"system-ui,-apple-system,sans-serif"}}>
+      <div style={{background:"#fff",borderRadius:18,padding:"26px 24px",maxWidth:440,
+        boxShadow:"0 20px 60px rgba(0,0,0,.45)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:15}}>
+          <div style={{width:40,height:40,borderRadius:11,background:`${BRAND}1A`,flexShrink:0,
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <AlertTriangle size={21} style={{color:BRAND}}/>
+          </div>
+          <h2 style={{margin:0,fontSize:18,fontWeight:900,color:"#1E293B"}}>Uso responsable</h2>
+        </div>
+        <p style={{margin:"0 0 11px",fontSize:13.5,lineHeight:1.6,color:"#374151"}}>
+          Esta aplicación refleja el inventario y la operación real de la empresa. Su buen
+          funcionamiento depende de que <b>cada registro sea verdadero y se haga con honestidad</b>.
+        </p>
+        <p style={{margin:"0 0 11px",fontSize:13.5,lineHeight:1.6,color:"#374151"}}>
+          Las entradas, salidas, producción e insumos que registres deben corresponder
+          <b> siempre a movimientos reales</b>. Cualquier dato falso, alterado o hecho fuera de
+          lo establecido puede causar errores en el inventario, decisiones equivocadas y un mal
+          funcionamiento del negocio.
+        </p>
+        <p style={{margin:"0 0 18px",fontSize:13.5,lineHeight:1.6,color:"#374151"}}>
+          Al continuar, te comprometes a usar la aplicación de forma
+          <b> correcta, honesta y responsable</b>.
+        </p>
+        <Btn onClick={onAccept} style={{width:"100%",justifyContent:"center"}}>
+          Entiendo y acepto
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 export default function SiroperApp(){
   const [view,      setView]      = useState(IS_BOSS ? "dashboard" : "inventario");
   const [products,  setProducts]  = useCloud("products");
@@ -1665,9 +1772,11 @@ export default function SiroperApp(){
   const [clients,   setClients]   = useCloud("clients");
   const [suppliers, setSuppliers] = useCloud("suppliers");
   const [prodLogs,  setProdLogs]  = useCloud("prodlogs");
+  const [insumos,   setInsumos]   = useCloud("insumos");
   const [toast,     setToast]     = useState(null);
   const [user,        setUser]        = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
   const [isMobile,  setIsMobile]  = useState(
     typeof window!=="undefined" && window.innerWidth<820);
   const [sideOpen,  setSideOpen]  = useState(
@@ -1716,6 +1825,26 @@ export default function SiroperApp(){
     return ()=>{ window.removeEventListener("online",up); window.removeEventListener("offline",down); };
   },[]);
 
+  // Aviso de uso responsable — una sola vez por usuario, en su primer ingreso.
+  const warnKey = user ? ("avisoOK_"+(user.uid||user.email||"u")) : null;
+  useEffect(()=>{
+    if(!user) return;
+    (async()=>{
+      try{
+        const { Preferences } = await import("@capacitor/preferences");
+        const { value } = await Preferences.get({ key:warnKey });
+        if(!value) setShowWarning(true);
+      }catch(e){ setShowWarning(true); }
+    })();
+  },[user]);
+  const acceptWarning=async()=>{
+    setShowWarning(false);
+    try{
+      const { Preferences } = await import("@capacitor/preferences");
+      await Preferences.set({ key:warnKey, value:"1" });
+    }catch(e){}
+  };
+
   // Notificación diaria a las 6:00 AM (solo app de Producción).
   // "Buongiorno, principessa!" — al estilo de La vida es bella.
   useEffect(()=>{
@@ -1730,9 +1859,9 @@ export default function SiroperApp(){
         await LocalNotifications.schedule({
           notifications:[{
             id:600,
-            title:"Buongiorno, principessa! 🌹",
+            title:"Buongiorno, principessa!",
             body:"",
-            schedule:{ at: new Date(Date.now()+15000) },
+            schedule:{ on:{ hour:6, minute:0 }, allowWhileIdle:true },
           }],
         });
       }catch(e){ console.error("notif",e); }
@@ -1754,7 +1883,8 @@ export default function SiroperApp(){
 
   const alerts=products.filter(p=>p.stock<p.min).length;
   const props={products,setProducts,entries,setEntries,exits,setExits,
-    clients,setClients,suppliers,setSuppliers,prodLogs,setProdLogs,showToast};
+    clients,setClients,suppliers,setSuppliers,prodLogs,setProdLogs,
+    insumos,setInsumos,user,showToast};
 
   const renderView=()=>{
     switch(view){
@@ -1843,10 +1973,6 @@ export default function SiroperApp(){
                 {showLabel&&(
                   <span style={{fontSize:12.5,fontWeight:active?800:500,whiteSpace:"nowrap"}}>
                     {item.label}
-                    {item.id==="dashboard"&&alerts>0&&(
-                      <span style={{background:"#DC2626",color:"#fff",borderRadius:99,
-                        fontSize:9,fontWeight:900,padding:"1px 5px",marginLeft:5}}>{alerts}</span>
-                    )}
                   </span>
                 )}
               </button>
@@ -1895,14 +2021,6 @@ export default function SiroperApp(){
             </h1>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-            {alerts>0&&(
-              <button onClick={()=>setView("inventario")}
-                style={{background:"#FEF3C7",border:"none",borderRadius:7,
-                  padding:"4px 10px",cursor:"pointer",display:"flex",alignItems:"center",
-                  gap:5,color:"#D97706",fontWeight:800,fontSize:11,whiteSpace:"nowrap"}}>
-                <AlertTriangle size={12}/> {alerts}{!isMobile&&" alertas"}
-              </button>
-            )}
             <div style={{width:30,height:30,borderRadius:99,
               background:THEME.dark,display:"flex",alignItems:"center",
               justifyContent:"center",fontFamily:"Georgia,serif",fontStyle:"italic",
@@ -1917,6 +2035,7 @@ export default function SiroperApp(){
       </main>
 
       {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
+      {showWarning&&<WarningModal onAccept={acceptWarning}/>}
     </div>
   );
 }
