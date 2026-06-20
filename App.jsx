@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Package, ArrowDownLeft, ArrowUpRight,
   Users, Truck, FlaskConical, Tag, FileSpreadsheet,
   Plus, Search, Edit2, Trash2, X, AlertTriangle,
-  Menu, Upload, Download, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Boxes
+  Menu, Upload, Download, TrendingUp, RefreshCw, ChevronDown, ChevronUp, Boxes, Minus, Activity, Clock
 } from "lucide-react";
 
 /* ══════════════════════════════════════════════
@@ -65,6 +65,67 @@ const GRP = {
 };
 
 const UNITS   = ["L","pzas","tambo","kg"];
+
+/* ══════════════════════════════════════════════
+   CATEGORÍAS DE INSUMOS (materia prima)
+   El Admin podrá añadir más cuando lleguen los grupos dinámicos.
+══════════════════════════════════════════════ */
+const INSUMO_GRP = {
+  endulzantes:  { label:"ENDULZANTES",          color:"#B45309", bg:"#FEF3C7", emoji:"🍬", defUnit:"kg"   },
+  saborizantes: { label:"SABORIZANTES",         color:"#9D174D", bg:"#FCE7F3", emoji:"🧪", defUnit:"L"    },
+  colorantes:   { label:"COLORANTES",           color:"#6D28D9", bg:"#EDE9FE", emoji:"🎨", defUnit:"L"    },
+  acidos:       { label:"ÁCIDOS / CONSERVADORES",color:"#0369A1", bg:"#E0F2FE", emoji:"⚗️", defUnit:"kg"  },
+  bases:        { label:"BASES / ESPESANTES",   color:"#78350F", bg:"#FEF9C3", emoji:"🥄", defUnit:"kg"   },
+  envases:      { label:"ENVASES",              color:"#1E40AF", bg:"#DBEAFE", emoji:"🫙", defUnit:"pzas" },
+  tapas:        { label:"TAPAS",                color:"#0E7490", bg:"#CFFAFE", emoji:"🔵", defUnit:"pzas" },
+  etiquetas:    { label:"ETIQUETAS",            color:"#B91C1C", bg:"#FEE2E2", emoji:"🏷️", defUnit:"pzas" },
+  empaque:      { label:"EMPAQUE",              color:"#C2410C", bg:"#FFF7ED", emoji:"📦", defUnit:"pzas" },
+  otros:        { label:"OTROS",                color:"#475569", bg:"#F1F5F9", emoji:"📋", defUnit:"pzas" },
+};
+const INSUMO_UNITS = ["kg","g","L","ml","pzas","caja","rollo","saco","tambo"];
+
+/* ══════════════════════════════════════════════
+   GRUPOS DINÁMICOS
+   GRP e INSUMO_GRP son MUTABLES: arrancan con los valores por defecto
+   y se reconstruyen sumando los grupos personalizados de la nube.
+══════════════════════════════════════════════ */
+const GRP_DEFAULTS    = JSON.parse(JSON.stringify(GRP));
+const INSUMO_DEFAULTS = JSON.parse(JSON.stringify(INSUMO_GRP));
+
+// Cada grupo de nube: {id,key,label,emoji,color,bg,defUnit,scope:"producto"|"insumo"|"ambos"}
+function rebuildGroups(cloud){
+  Object.keys(GRP).forEach(k=>delete GRP[k]);
+  Object.keys(INSUMO_GRP).forEach(k=>delete INSUMO_GRP[k]);
+  Object.assign(GRP, JSON.parse(JSON.stringify(GRP_DEFAULTS)));
+  Object.assign(INSUMO_GRP, JSON.parse(JSON.stringify(INSUMO_DEFAULTS)));
+  (cloud||[]).forEach(g=>{
+    if(!g||!g.key) return;
+    const base={label:g.key,emoji:"📦",color:"#475569",bg:"#F1F5F9",defUnit:"pzas"};
+    const e={};
+    ["label","emoji","color","bg","defUnit"].forEach(f=>{ if(g[f]!=null&&g[f]!=="") e[f]=g[f]; });
+    const sc=g.scope||"producto";
+    if(sc==="producto"||sc==="ambos") GRP[g.key]={...(GRP[g.key]||base),...e};
+    if(sc==="insumo"||sc==="ambos")   INSUMO_GRP[g.key]={...(INSUMO_GRP[g.key]||base),...e};
+  });
+}
+
+const isDefaultGroup = key =>
+  Object.prototype.hasOwnProperty.call(GRP_DEFAULTS,key) ||
+  Object.prototype.hasOwnProperty.call(INSUMO_DEFAULTS,key);
+
+const GROUP_SWATCHES=[
+  {color:"#B45309",bg:"#FEF3C7"},{color:"#9D174D",bg:"#FCE7F3"},{color:"#6D28D9",bg:"#EDE9FE"},
+  {color:"#0369A1",bg:"#E0F2FE"},{color:"#059669",bg:"#D1FAE5"},{color:"#B91C1C",bg:"#FEE2E2"},
+  {color:"#C2410C",bg:"#FFF7ED"},{color:"#0E7490",bg:"#CFFAFE"},{color:"#475569",bg:"#F1F5F9"},
+];
+
+function slugifyGroup(label){
+  const base=(label||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"grupo";
+  let key=base,n=1;
+  while(GRP[key]||INSUMO_GRP[key]) key=base+"_"+(++n);
+  return key;
+}
 const SIDEBAR_W = 220;
 
 /* Rol de la app — se fija al construir cada APK (VITE_ROLE):
@@ -76,8 +137,8 @@ const IS_BOSS = ROLE === "jefe";
 let CURRENT_USER_EMAIL = "";
 
 /* Nombre y tema visual según el rol.
-   La app de Producción ("Producción Patrona") va en rosa. */
-const APP_NAME = IS_BOSS ? "Administración Sirope" : "Producción Sirope";
+   La app de Producción ("Producción Andi") va en rosa. */
+const APP_NAME = IS_BOSS ? "Sirope" : "Producción Andi";
 const THEME = IS_BOSS ? {
   brand:"#FF6B35",
   sidebar:"#0D1629",
@@ -263,6 +324,34 @@ const PROD_INIT  = [];
 ══════════════════════════════════════════════ */
 const fmt  = n => `$${Number(n).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const fmtD = d => { try{ return new Date(d+"T12:00:00").toLocaleDateString("es-MX"); }catch{ return d; }};
+
+// ── Log de uso de la app (sesiones) ──
+function deviceLabel(){
+  const ua=(typeof navigator!=="undefined"&&navigator.userAgent)||"";
+  if(/Android/i.test(ua))return "Android";
+  if(/iPhone|iPad|iPod/i.test(ua))return "iPhone/iPad";
+  if(/Windows/i.test(ua))return "Windows";
+  if(/Macintosh|Mac OS/i.test(ua))return "Mac";
+  if(/Linux/i.test(ua))return "Linux";
+  return "Dispositivo";
+}
+async function writeSession(id,data){
+  if(!FIREBASE_LISTO||!id) return;
+  try{ await setDoc(doc(db,"sessions",String(id)),data,{merge:true}); }catch(e){ console.error("session",e); }
+}
+const fmtDur = min => {
+  min=Math.max(0,Math.round(min));
+  if(min<1) return "—";
+  if(min<60) return `${min} min`;
+  const h=Math.floor(min/60), m=min%60;
+  return m?`${h} h ${m} min`:`${h} h`;
+};
+const fmtDT = t => {
+  if(!t) return "—";
+  try{ const d=new Date(t), p=n=>String(n).padStart(2,"0");
+    return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }catch{ return "—"; }
+};
 const tdayStr = () => new Date().toISOString().split("T")[0];
 const stockSt = (s,m) => {
   if(s===0)  return{label:"Sin stock",color:"#DC2626",bg:"#FEE2E2"};
@@ -1346,6 +1435,427 @@ function ProduccionView({prodLogs,setProdLogs,products,setProducts,showToast}){
 }
 
 /* ══════════════════════════════════════════════
+   USUARIOS / LOG DE USO (solo Admin)
+══════════════════════════════════════════════ */
+function UsuariosView({showToast}){
+  const [sessions,setSessions]=useCloud("sessions");
+  const [confirm,setConfirm]=useState(false);
+  const now=Date.now();
+
+  const rows=useMemo(()=>(sessions||[]).map(s=>{
+    const login=s.loginAt?new Date(s.loginAt).getTime():0;
+    const seen =s.lastSeen?new Date(s.lastSeen).getTime():login;
+    const end  =s.logoutAt?new Date(s.logoutAt).getTime():seen;
+    const durMin=login?Math.max(0,(end-login)/60000):0;
+    const active=!s.logoutAt && s.lastSeen && (now-seen<5*60000);
+    return {...s,login,seen,end,durMin,active};
+  }).sort((a,b)=>b.login-a.login),[sessions,now]);
+
+  const todayStr=new Date().toDateString();
+  const isToday=t=>t&&new Date(t).toDateString()===todayStr;
+  const sesToday=rows.filter(r=>isToday(r.loginAt));
+  const usersToday=new Set(sesToday.map(r=>r.email)).size;
+  const minsToday=sesToday.reduce((s,r)=>s+r.durMin,0);
+  const activeNow=rows.filter(r=>r.active).length;
+
+  const clearAll=()=>{ setSessions(()=>[]); showToast("Registros borrados"); setConfirm(false); };
+
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:10,flexWrap:"wrap"}}>
+        <div>
+          <h2 style={{margin:0,fontSize:19,fontWeight:900,color:"#1E293B"}}>Usuarios y uso</h2>
+          <p style={{margin:"2px 0 0",fontSize:11,color:"#94A3B8"}}>Quién entra, desde dónde y cuánto tiempo</p>
+        </div>
+        {rows.length>0&&<Btn variant="secondary" onClick={()=>setConfirm(true)}><Trash2 size={13}/> Limpiar</Btn>}
+      </div>
+
+      <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+        <StatCard label="Activos ahora" value={activeNow} sub="en los últimos 5 min" icon={<Activity size={18}/>} color="#059669"/>
+        <StatCard label="Usuarios hoy" value={usersToday} sub="entraron hoy" icon={<Users size={18}/>} color={BRAND}/>
+        <StatCard label="Tiempo de uso hoy" value={fmtDur(minsToday)} sub="sumado entre todos" icon={<Clock size={18}/>} color="#6D28D9"/>
+        <StatCard label="Sesiones hoy" value={sesToday.length} sub="aperturas de app" icon={<TrendingUp size={18}/>} color="#0369A1"/>
+      </div>
+
+      <Card>
+        <Tbl cols={["Usuario","App","Dispositivo","Entró","Última actividad","Duración","Estado"]}>
+          {rows.length===0&&<EmptyRow cols={7} msg="Aún no hay registros de uso"/>}
+          {rows.slice(0,300).map(r=>(
+            <Tr key={r.id}>
+              <Td style={{fontWeight:700}}>{r.email||"—"}</Td>
+              <Td style={{fontSize:12,color:"#64748B"}}>{r.app||(r.role==="jefe"?"Administración":"Producción")}</Td>
+              <Td style={{fontSize:12,color:"#64748B"}}>{r.device||"—"}</Td>
+              <Td style={{fontSize:12,color:"#64748B",whiteSpace:"nowrap"}}>{fmtDT(r.loginAt)}</Td>
+              <Td style={{fontSize:12,color:"#64748B",whiteSpace:"nowrap"}}>{fmtDT(r.lastSeen)}</Td>
+              <Td style={{fontWeight:700}}>{fmtDur(r.durMin)}</Td>
+              <Td>
+                {r.active
+                  ? <span style={{fontSize:10,fontWeight:800,color:"#059669",background:"#D1FAE5",borderRadius:6,padding:"2px 8px"}}>● Activo</span>
+                  : <span style={{fontSize:10,fontWeight:700,color:"#94A3B8"}}>{r.logoutAt?"Cerró sesión":"Inactivo"}</span>}
+              </Td>
+            </Tr>
+          ))}
+        </Tbl>
+      </Card>
+
+      {confirm&&<Confirm msg="¿Borrar todo el historial de uso? Esto no se puede deshacer." onYes={clearAll} onNo={()=>setConfirm(false)}/>}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   GRUPOS VIEW (gestión de grupos/categorías — solo Admin)
+══════════════════════════════════════════════ */
+function GruposView({cloudGroups,setCloudGroups,products,insumos,grpVersion,showToast}){
+  const [modal,setModal]=useState(false);
+  const [editKey,setEditKey]=useState(null);
+  const [confirm,setConfirm]=useState(null);
+  const [form,setForm]=useState({});
+
+  const usage=key=>products.filter(p=>p.grp===key).length+insumos.filter(i=>i.grp===key).length;
+
+  const openAdd=()=>{ setEditKey(null); setForm({label:"",emoji:"📦",defUnit:"pzas",scope:"producto",swatch:0}); setModal(true); };
+  const openEdit=key=>{
+    const g=GRP[key]||INSUMO_GRP[key]||{};
+    const cloud=cloudGroups.find(c=>c.key===key);
+    const scope=cloud?.scope||(GRP_DEFAULTS[key]?"producto":(INSUMO_DEFAULTS[key]?"insumo":"producto"));
+    let sw=GROUP_SWATCHES.findIndex(s=>s.color===g.color); if(sw<0) sw=0;
+    setForm({label:g.label||"",emoji:g.emoji||"📦",defUnit:g.defUnit||"pzas",scope,swatch:sw});
+    setEditKey(key); setModal(true);
+  };
+  const save=()=>{
+    const label=(form.label||"").trim();
+    if(!label) return showToast("Ponle un nombre al grupo","error");
+    const sw=GROUP_SWATCHES[form.swatch]||GROUP_SWATCHES[0];
+    const data={label,emoji:(form.emoji||"📦").trim()||"📦",color:sw.color,bg:sw.bg,
+      defUnit:form.defUnit||"pzas",scope:form.scope||"producto"};
+    if(editKey){
+      const existing=cloudGroups.find(c=>c.key===editKey);
+      if(existing) setCloudGroups(prev=>prev.map(c=>c.id===existing.id?{...c,...data,key:editKey}:c));
+      else setCloudGroups(prev=>[...prev,{id:nid("grp"),key:editKey,...data}]);
+      showToast("Grupo actualizado ✓");
+    }else{
+      const key=slugifyGroup(label);
+      setCloudGroups(prev=>[...prev,{id:nid("grp"),key,...data}]);
+      showToast("Grupo creado ✓");
+    }
+    setModal(false); setEditKey(null);
+  };
+  const del=key=>{
+    const existing=cloudGroups.find(c=>c.key===key);
+    if(existing) setCloudGroups(prev=>prev.filter(c=>c.id!==existing.id));
+    showToast("Grupo eliminado"); setConfirm(null);
+  };
+
+  const Section=({title,map,area})=>(
+    <Card style={{marginBottom:16}}>
+      <div style={{padding:"12px 16px",borderBottom:"1px solid #F1F5F9",fontWeight:800,fontSize:13,color:"#1E293B"}}>{title}</div>
+      <Tbl cols={["","Grupo","En uso","Tipo",""]}>
+        {Object.entries(map).map(([k,g])=>{
+          const def=isDefaultGroup(k);
+          const u=usage(k);
+          return(
+            <Tr key={k+grpVersion}>
+              <Td style={{width:34,fontSize:18,textAlign:"center"}}>{g.emoji}</Td>
+              <Td><span style={{display:"inline-flex",alignItems:"center",gap:6,background:g.bg,color:g.color,
+                borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:800}}>{g.label}</span></Td>
+              <Td style={{color:"#64748B",fontSize:12}}>{u} ítem{u===1?"":"s"}</Td>
+              <Td style={{fontSize:10,fontWeight:800,color:def?"#94A3B8":BRAND}}>{def?"Predefinido":"Personalizado"}</Td>
+              <Td>
+                <div style={{display:"flex",gap:4}}>
+                  <Btn small variant="secondary" onClick={()=>openEdit(k)}><Edit2 size={11}/></Btn>
+                  {!def&&<Btn small variant="danger" onClick={()=>setConfirm(k)}><Trash2 size={11}/></Btn>}
+                </div>
+              </Td>
+            </Tr>
+          );
+        })}
+      </Tbl>
+    </Card>
+  );
+
+  const confItem=confirm?{u:usage(confirm)}:null;
+
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:10,flexWrap:"wrap"}}>
+        <div>
+          <h2 style={{margin:0,fontSize:19,fontWeight:900,color:"#1E293B"}}>Grupos y categorías</h2>
+          <p style={{margin:"2px 0 0",fontSize:11,color:"#94A3B8"}}>Organiza tus productos e insumos</p>
+        </div>
+        <Btn onClick={openAdd}><Plus size={14}/> Nuevo grupo</Btn>
+      </div>
+
+      <Section title="🧴 Grupos de Productos" map={GRP} area="producto"/>
+      <Section title="📦 Categorías de Insumos" map={INSUMO_GRP} area="insumo"/>
+
+      {modal&&(
+        <Modal title={editKey?"Editar grupo":"Nuevo grupo"} onClose={()=>{setModal(false);setEditKey(null);}}>
+          <FormRow>
+            <Field label="Nombre" half><FInput value={form.label} onChange={e=>setForm(p=>({...p,label:e.target.value}))} placeholder="Ej. Etiquetas premium"/></Field>
+            <Field label="Emoji" half><FInput value={form.emoji} onChange={e=>setForm(p=>({...p,emoji:e.target.value}))} placeholder="📦"/></Field>
+          </FormRow>
+          <FormRow>
+            <Field label="¿Para qué sirve?" half>
+              <FSelect value={form.scope} onChange={e=>setForm(p=>({...p,scope:e.target.value}))}>
+                <option value="producto">Productos</option>
+                <option value="insumo">Insumos</option>
+                <option value="ambos">Ambos</option>
+              </FSelect>
+            </Field>
+            <Field label="Unidad por defecto" half>
+              <FSelect value={form.defUnit} onChange={e=>setForm(p=>({...p,defUnit:e.target.value}))}>
+                {[...new Set([...UNITS,...INSUMO_UNITS])].map(u=><option key={u} value={u}>{u}</option>)}
+              </FSelect>
+            </Field>
+          </FormRow>
+          <Field label="Color">
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {GROUP_SWATCHES.map((s,i)=>(
+                <button key={i} type="button" onClick={()=>setForm(p=>({...p,swatch:i}))}
+                  style={{width:34,height:34,borderRadius:9,background:s.bg,cursor:"pointer",
+                    border:form.swatch===i?`3px solid ${s.color}`:"2px solid #E2E8F0",
+                    display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <span style={{width:14,height:14,borderRadius:99,background:s.color}}/>
+                </button>
+              ))}
+            </div>
+          </Field>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:6}}>
+            <Btn variant="secondary" onClick={()=>{setModal(false);setEditKey(null);}}>Cancelar</Btn>
+            <Btn onClick={save}><Boxes size={13}/> {editKey?"Guardar":"Crear"}</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {confirm&&(
+        <Confirm
+          msg={confItem.u>0
+            ? `Este grupo tiene ${confItem.u} ítem(s) asignados. Si lo borras, quedarán sin grupo. ¿Continuar?`
+            : "¿Eliminar este grupo?"}
+          onYes={()=>del(confirm)} onNo={()=>setConfirm(null)}/>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   INSUMOS VIEW (materia prima)
+   Admin: alta/edición/borrado + entrada/consumo.
+   Producción: solo entrada y consumo (sin precios).
+══════════════════════════════════════════════ */
+function InsumoBadge({grp}){
+  const g=INSUMO_GRP[grp];
+  if(!g) return <span style={{color:"#94A3B8",fontSize:11}}>—</span>;
+  return(
+    <span style={{display:"inline-flex",alignItems:"center",gap:4,background:g.bg,color:g.color,
+      borderRadius:6,padding:"2px 7px",fontSize:10,fontWeight:800,whiteSpace:"nowrap"}}>
+      <span>{g.emoji}</span>{g.label}
+    </span>
+  );
+}
+
+function InsumosView({insumos,setInsumos,suppliers,showToast}){
+  const [search,setSearch]=useState("");
+  const [selGrp,setSelGrp]=useState(null);
+  const [modal,setModal]=useState(null);     // "add" | "edit"
+  const [mov,setMov]=useState(null);          // {insumo, mode:"in"|"out"}
+  const [form,setForm]=useState({});
+  const [movForm,setMovForm]=useState({});
+  const [confirm,setConfirm]=useState(null);
+  const f=k=>e=>setForm(prev=>({...prev,[k]:e.target.value}));
+
+  const filtered=useMemo(()=>insumos.filter(i=>{
+    const q=search.trim().toLowerCase();
+    const mQ=!q||(i.name||"").toLowerCase().includes(q);
+    const mG=!selGrp||i.grp===selGrp;
+    return mQ&&mG;
+  }),[insumos,search,selGrp]);
+
+  const valorTotal=useMemo(()=>insumos.reduce((s,i)=>s+(Number(i.stock)||0)*(Number(i.cost)||0),0),[insumos]);
+  const grpCounts=useMemo(()=>{
+    const r={}; Object.keys(INSUMO_GRP).forEach(k=>{ r[k]=insumos.filter(i=>i.grp===k).length; });
+    return r;
+  },[insumos]);
+
+  const openAdd=()=>{
+    const grp=selGrp||"endulzantes";
+    setForm({name:"",grp,stock:0,min:0,unit:INSUMO_GRP[grp].defUnit,cost:0,provId:""});
+    setModal("add");
+  };
+  const openEdit=i=>{setForm({...i,provId:i.provId||"",min:i.min??0,cost:i.cost??0});setModal("edit");};
+  const save=()=>{
+    if(!(form.name||"").trim()) return showToast("El nombre es requerido","error");
+    const item={...form,stock:+form.stock||0,min:+form.min||0,cost:+form.cost||0};
+    if(modal==="add"){ setInsumos(prev=>[...prev,{...item,id:nid("ins")}]); showToast("Insumo agregado ✓"); }
+    else { setInsumos(prev=>prev.map(i=>i.id===form.id?item:i)); showToast("Insumo actualizado ✓"); }
+    setModal(null);
+  };
+  const del=id=>{ setInsumos(prev=>prev.filter(i=>i.id!==id)); showToast("Insumo eliminado"); setConfirm(null); };
+
+  const openMov=(insumo,mode)=>{ setMov({insumo,mode}); setMovForm({qty:1,cost:insumo.cost??"",notes:""}); };
+  const fm=k=>e=>setMovForm(prev=>({...prev,[k]:e.target.value}));
+  const saveMov=()=>{
+    const q=+movForm.qty;
+    if(!(q>0)) return showToast("Cantidad inválida","error");
+    const ins=mov.insumo;
+    if(mov.mode==="out" && (Number(ins.stock)||0)<q)
+      return showToast(`No hay suficiente. Disponible: ${ins.stock||0} ${ins.unit||""}`,"error");
+    setInsumos(prev=>prev.map(i=>{
+      if(i.id!==ins.id) return i;
+      const ns=(Number(i.stock)||0)+(mov.mode==="in"?q:-q);
+      const patch={...i,stock:ns};
+      if(mov.mode==="in" && movForm.cost!=="" && movForm.cost!=null) patch.cost=+movForm.cost;
+      return patch;
+    }));
+    showToast(mov.mode==="in"?`+${q} ${ins.unit||""} a ${ins.name}`:`-${q} ${ins.unit||""} de ${ins.name}`);
+    setMov(null);
+  };
+
+  const cols = IS_BOSS
+    ? ["Insumo","Categoría","Cantidad","Costo","Valor","Proveedor",""]
+    : ["Insumo","Categoría","Cantidad","Proveedor",""];
+  const nCols = cols.length;
+
+  return(
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:10,flexWrap:"wrap"}}>
+        <div>
+          <h2 style={{margin:0,fontSize:19,fontWeight:900,color:"#1E293B"}}>Insumos</h2>
+          <p style={{margin:"2px 0 0",fontSize:11,color:"#94A3B8"}}>Materia prima para producción</p>
+        </div>
+        <Btn onClick={openAdd}><Plus size={14}/> Nuevo insumo</Btn>
+      </div>
+
+      {IS_BOSS&&(
+        <Card style={{marginBottom:14,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:12,color:"#64748B",fontWeight:600}}>Valor total invertido en insumos</span>
+          <span style={{fontSize:18,fontWeight:900,color:BRAND}}>{fmt(valorTotal)}</span>
+        </Card>
+      )}
+
+      {/* CATEGORÍAS arriba (como Producción): toca una para ver lo que tienes */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(145px,1fr))",
+        gap:10,marginBottom:18}}>
+        {Object.entries(INSUMO_GRP).map(([k,g])=>(
+          <div key={k} onClick={()=>setSelGrp(selGrp===k?null:k)}
+            style={{background:selGrp===k?g.bg:"#fff",
+              border:`2px solid ${selGrp===k?g.color:"#E2E8F0"}`,
+              borderRadius:12,padding:"12px 14px",cursor:"pointer",transition:"all .15s",
+              boxShadow:selGrp===k?`0 0 0 3px ${g.color}22`:"0 1px 3px rgba(0,0,0,.05)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
+              <span style={{fontSize:16}}>{g.emoji}</span>
+              <span style={{fontSize:9,fontWeight:800,color:g.color,
+                textTransform:"uppercase",letterSpacing:.4,lineHeight:1.2}}>{g.label}</span>
+            </div>
+            <p style={{margin:0,fontSize:19,fontWeight:900,color:"#1E293B",lineHeight:1}}>
+              {grpCounts[k]||0} <span style={{fontSize:10,fontWeight:400,color:"#94A3B8"}}>ítems</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <Card>
+        <Tbl cols={cols}>
+          {filtered.length===0&&<EmptyRow cols={nCols} msg="Sin insumos. El Admin puede agregarlos con “Nuevo insumo”."/>}
+          {filtered.map(i=>{
+            const prov=suppliers.find(s=>s.id===i.provId);
+            const low=Number(i.min)>0 && Number(i.stock)<=Number(i.min);
+            return(
+              <Tr key={i.id}>
+                <Td style={{fontWeight:700}}>{i.name}</Td>
+                <Td><InsumoBadge grp={i.grp}/></Td>
+                <Td>
+                  <span style={{fontWeight:800,color:low?"#DC2626":"#1E293B"}}>{i.stock||0}</span>
+                  <span style={{color:"#94A3B8",fontSize:11}}> {i.unit}</span>
+                  {low&&<span style={{marginLeft:5,fontSize:9,fontWeight:800,color:"#DC2626"}}>BAJO</span>}
+                </Td>
+                {IS_BOSS&&<Td>{i.cost?fmt(i.cost):"—"}</Td>}
+                {IS_BOSS&&<Td style={{fontWeight:700}}>{i.cost?fmt((Number(i.stock)||0)*(Number(i.cost)||0)):"—"}</Td>}
+                <Td style={{color:"#64748B",fontSize:12}}>{prov?.name||"—"}</Td>
+                <Td>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    <Btn small variant="success" onClick={()=>openMov(i,"in")} title="Entrada / agregar"><Plus size={11}/></Btn>
+                    <Btn small variant="secondary" onClick={()=>openMov(i,"out")} title="Consumo / usar"><Minus size={11}/></Btn>
+                    <Btn small variant="secondary" onClick={()=>openEdit(i)}><Edit2 size={11}/></Btn>
+                    {IS_BOSS&&<Btn small variant="danger" onClick={()=>setConfirm(i.id)}><Trash2 size={11}/></Btn>}
+                  </div>
+                </Td>
+              </Tr>
+            );
+          })}
+        </Tbl>
+      </Card>
+
+      {/* Alta / edición (solo Admin) */}
+      {modal&&(
+        <Modal title={modal==="add"?"Nuevo insumo":"Editar insumo"} onClose={()=>setModal(null)}>
+          <Field label="Nombre"><FInput value={form.name} onChange={f("name")} placeholder="Ej. Azúcar refinada"/></Field>
+          <FormRow>
+            <Field label="Categoría" half>
+              <FSelect value={form.grp} onChange={e=>{
+                const g=e.target.value;
+                setForm(prev=>({...prev,grp:g,unit:prev.unit||INSUMO_GRP[g].defUnit}));
+              }}>
+                {Object.entries(INSUMO_GRP).map(([k,g])=><option key={k} value={k}>{g.emoji} {g.label}</option>)}
+              </FSelect>
+            </Field>
+            <Field label="Unidad" half>
+              <FSelect value={form.unit} onChange={f("unit")}>
+                {INSUMO_UNITS.map(u=><option key={u} value={u}>{u}</option>)}
+              </FSelect>
+            </Field>
+          </FormRow>
+          <FormRow>
+            <Field label="Cantidad actual" half><FInput type="number" value={form.stock} onChange={f("stock")} min={0}/></Field>
+            <Field label="Mínimo (alerta)" half><FInput type="number" value={form.min} onChange={f("min")} min={0} placeholder="0"/></Field>
+          </FormRow>
+          <FormRow>
+            {IS_BOSS&&<Field label="Costo de compra ($)" half><FInput type="number" value={form.cost} onChange={f("cost")} min={0} placeholder="0.00"/></Field>}
+            <Field label="Proveedor" half>
+              <FSelect value={form.provId} onChange={f("provId")}>
+                <option value="">Sin proveedor</option>
+                {suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+              </FSelect>
+            </Field>
+          </FormRow>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <Btn variant="secondary" onClick={()=>setModal(null)}>Cancelar</Btn>
+            <Btn onClick={save}><Boxes size={13}/> {modal==="add"?"Agregar":"Guardar"}</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* Entrada / Consumo (todos) */}
+      {mov&&(
+        <Modal title={(mov.mode==="in"?"Entrada de ":"Consumo de ")+mov.insumo.name} onClose={()=>setMov(null)}>
+          <p style={{margin:"0 0 12px",fontSize:12,color:"#64748B"}}>
+            Disponible ahora: <b style={{color:"#1E293B"}}>{mov.insumo.stock||0} {mov.insumo.unit}</b>
+          </p>
+          <Field label={mov.mode==="in"?"Cantidad que entra":"Cantidad que se usa"}>
+            <FInput type="number" value={movForm.qty} onChange={fm("qty")} min={1}/>
+          </Field>
+          {mov.mode==="in"&&IS_BOSS&&(
+            <Field label="Actualizar costo de compra ($) — opcional">
+              <FInput type="number" value={movForm.cost} onChange={fm("cost")} min={0} placeholder="0.00"/>
+            </Field>
+          )}
+          <Field label="Nota (opcional)"><FArea value={movForm.notes} onChange={fm("notes")} placeholder={mov.mode==="in"?"Compra, devolución...":"¿En qué se usó?"}/></Field>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <Btn variant="secondary" onClick={()=>setMov(null)}>Cancelar</Btn>
+            <Btn onClick={saveMov} variant={mov.mode==="in"?"success":"danger"}>
+              {mov.mode==="in"?<><Plus size={13}/> Sumar</>:<><Minus size={13}/> Restar</>}
+            </Btn>
+          </div>
+        </Modal>
+      )}
+
+      {confirm&&<Confirm msg="¿Eliminar este insumo?" onYes={()=>del(confirm)} onNo={()=>setConfirm(null)}/>}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
    PRECIOS VIEW
 ══════════════════════════════════════════════ */
 function PreciosView({products,setProducts,showToast}){
@@ -1606,12 +2116,15 @@ function ReportesView({products,entries,exits,clients,suppliers,prodLogs,setProd
 const NAV=[
   {id:"dashboard",  label:"Dashboard",   icon:<LayoutDashboard size={16}/>},
   {id:"inventario", label:"Inventario",  icon:<Package size={16}/>},
+  {id:"insumos",    label:"Insumos",     icon:<Boxes size={16}/>},
   {id:"entradas",   label:"Entradas",    icon:<ArrowDownLeft size={16}/>},
   {id:"salidas",    label:"Salidas",     icon:<ArrowUpRight size={16}/>},
   {id:"clientes",   label:"Clientes",    icon:<Users size={16}/>},
   {id:"proveedores",label:"Proveedores", icon:<Truck size={16}/>},
   {id:"produccion", label:"Producción",  icon:<FlaskConical size={16}/>},
+  {id:"grupos",     label:"Grupos",      icon:<Boxes size={16}/>},
   {id:"precios",    label:"Precios",     icon:<Tag size={16}/>},
+  {id:"usuarios",   label:"Usuarios",    icon:<Activity size={16}/>},
   {id:"reportes",   label:"Reportes",    icon:<FileSpreadsheet size={16}/>},
 ];
 
@@ -1708,7 +2221,7 @@ function LoginScreen(){
           fontSize:24,color:"#fff"}}>{IS_BOSS?"S":"P"}</span>
       </div>
       <h2 style={{margin:"0 0 2px",fontSize:19,fontWeight:900,color:"#1E293B"}}>
-        {IS_BOSS ? "Administración Sirope" : "Producción Sirope"}
+        {IS_BOSS ? "Sirope Admin" : "Producción Andi"}
       </h2>
       <p style={{margin:"0 0 18px",fontSize:12,color:"#94A3B8"}}>Inicia sesión para continuar</p>
       <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Correo"
@@ -1773,10 +2286,14 @@ export default function SiroperApp(){
   const [suppliers, setSuppliers] = useCloud("suppliers");
   const [prodLogs,  setProdLogs]  = useCloud("prodlogs");
   const [insumos,   setInsumos]   = useCloud("insumos");
+  const [cloudGroups,setCloudGroups]=useCloud("groups");
+  const [grpVersion, setGrpVersion]=useState(0);
+  useEffect(()=>{ rebuildGroups(cloudGroups); setGrpVersion(v=>v+1); },[cloudGroups]);
   const [toast,     setToast]     = useState(null);
   const [user,        setUser]        = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  const sessionRef = useRef(null);
   const [isMobile,  setIsMobile]  = useState(
     typeof window!=="undefined" && window.innerWidth<820);
   const [sideOpen,  setSideOpen]  = useState(
@@ -1790,6 +2307,13 @@ export default function SiroperApp(){
       setUser(u);
       setAuthChecked(true);
       CURRENT_USER_EMAIL = u ? (u.email||"") : "";
+      if(u){
+        const sid=nid("ses");
+        sessionRef.current=sid;
+        const t=new Date().toISOString();
+        writeSession(sid,{email:u.email||"",role:ROLE,app:APP_NAME,
+          device:deviceLabel(),loginAt:t,lastSeen:t,logoutAt:null});
+      }
       if(u && IS_BOSS){
         try{
           const snap=await getDocs(collection(db,"products"));
@@ -1804,7 +2328,16 @@ export default function SiroperApp(){
     return ()=>unsub();
   },[]);
 
-  // Track viewport so the sidebar behaves as a drawer on phones
+  // Heartbeat: marca "última actividad" mientras la app está abierta.
+  useEffect(()=>{
+    if(!user) return;
+    const beat=()=>{ if(sessionRef.current) writeSession(sessionRef.current,{lastSeen:new Date().toISOString()}); };
+    const iv=setInterval(beat,60000);
+    const onHide=()=>{ if(document.visibilityState==="hidden") beat(); };
+    document.addEventListener("visibilitychange",onHide);
+    window.addEventListener("beforeunload",beat);
+    return ()=>{ clearInterval(iv); document.removeEventListener("visibilitychange",onHide); window.removeEventListener("beforeunload",beat); };
+  },[user]);
   useEffect(()=>{
     const onResize=()=>{
       const mobile=window.innerWidth<820;
@@ -1845,25 +2378,32 @@ export default function SiroperApp(){
     }catch(e){}
   };
 
-  // Notificación diaria a las 6:00 AM (solo app de Producción).
-  // "Buongiorno, principessa!" — al estilo de La vida es bella.
+  // Saludo "Buongiorno, principessa!" — una sola vez al día,
+  // la primera vez que se abre la app, 5 segundos después de entrar.
   useEffect(()=>{
     if(IS_BOSS || !user) return;
     (async()=>{
       try{
         if(!Capacitor.isNativePlatform?.()) return;
         const { LocalNotifications } = await import("@capacitor/local-notifications");
+        const { Preferences } = await import("@capacitor/preferences");
         const perm = await LocalNotifications.requestPermissions();
         if(perm.display !== "granted") return;
-        await LocalNotifications.cancel({ notifications:[{id:600}] }).catch(()=>{});
+        const hoy = new Date().toLocaleDateString("en-CA"); // AAAA-MM-DD local
+        const { value:ultimo } = await Preferences.get({ key:"saludoFecha" });
+        if(ultimo === hoy) return;                 // ya saludó hoy
         await LocalNotifications.schedule({
           notifications:[{
             id:600,
             title:"Buongiorno, principessa!",
-            body:"",
-            schedule:{ on:{ hour:6, minute:0 }, allowWhileIdle:true },
+            body:"Que tengas un lindo día.🌹",
+            smallIcon:"ic_stat_kitty",
+            largeIcon:"kitty_large",
+            iconColor:"#DB2777",
+            schedule:{ at: new Date(Date.now()+5000) },
           }],
         });
+        await Preferences.set({ key:"saludoFecha", value:hoy });
       }catch(e){ console.error("notif",e); }
     })();
   },[user]);
@@ -1884,31 +2424,41 @@ export default function SiroperApp(){
   const alerts=products.filter(p=>p.stock<p.min).length;
   const props={products,setProducts,entries,setEntries,exits,setExits,
     clients,setClients,suppliers,setSuppliers,prodLogs,setProdLogs,
-    insumos,setInsumos,user,showToast};
+    insumos,setInsumos,cloudGroups,setCloudGroups,grpVersion,user,showToast};
 
   const renderView=()=>{
     switch(view){
       case "dashboard":   return <Dashboard {...props} setView={setView}/>;
       case "inventario":  return <InventarioView {...props}/>;
+      case "insumos":     return <InsumosView {...props}/>;
       case "entradas":    return <EntradasView {...props}/>;
       case "salidas":     return <SalidasView {...props}/>;
       case "clientes":    return <CRUDView title="Clientes"    items={clients}   setItems={setClients}   fields={CLI_FIELDS}  idKey="cli"  showToast={showToast}/>;
       case "proveedores": return <CRUDView title="Proveedores" items={suppliers} setItems={setSuppliers} fields={PROV_FIELDS} idKey="prov" showToast={showToast}/>;
       case "produccion":  return <ProduccionView {...props}/>;
+      case "grupos":      return <GruposView {...props}/>;
       case "precios":     return <PreciosView {...props}/>;
+      case "usuarios":    return <UsuariosView showToast={showToast}/>;
       case "reportes":    return <ReportesView {...props}/>;
       default: return null;
     }
   };
 
-  // Navegación según el rol. Producción solo ve Stock, Producción y Reportes.
-  const PRODUCER_VIEWS=["inventario","produccion","reportes"];
+  // Navegación según el rol. Producción solo ve Stock, Insumos, Producción y Reportes.
+  const PRODUCER_VIEWS=["inventario","insumos","produccion","reportes"];
   const navItems = IS_BOSS
     ? NAV
     : NAV.filter(n=>PRODUCER_VIEWS.includes(n.id))
          .map(n=>n.id==="inventario"?{...n,label:"Stock"}:n);
 
-  const doLogout=async()=>{ try{ await signOut(auth); }catch(e){} };
+  const doLogout=async()=>{
+    if(sessionRef.current){
+      const t=new Date().toISOString();
+      await writeSession(sessionRef.current,{logoutAt:t,lastSeen:t});
+      sessionRef.current=null;
+    }
+    try{ await signOut(auth); }catch(e){}
+  };
 
   return(
     <div style={{display:"flex",height:"100vh",fontFamily:"system-ui,-apple-system,sans-serif",
